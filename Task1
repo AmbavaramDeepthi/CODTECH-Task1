@@ -1,0 +1,130 @@
+library IEEE;
+use IEEE.STD_LOGIC;
+use IEEE.NUMERIC_STD.ALL;
+
+entity uart is
+    Port ( clk : in  STD_LOGIC;
+           rst : in  STD_LOGIC;
+           tx_data : in  STD_LOGIC_VECTOR (7 downto 0);
+           tx_done : out  STD_LOGIC;
+           rx_data : out  STD_LOGIC_VECTOR (7 downto 0);
+           rx_clk : in  STD_LOGIC;
+           rx_data_in : in  STD_LOGIC);
+end uart;
+
+architecture Behavioral of uart is
+    constant BAUD_RATE : integer := 9600;
+    constant CLK_FREQ : integer := 50e6;
+    constant DATA_BITS : integer := 8;
+    constant STOP_BITS : integer := 1;
+
+    signal tx_reg : STD_LOGIC_VECTOR (7 downto 0);
+    signal rx_reg : STD_LOGIC_VECTOR (7 downto 0);
+    signal tx_enable : STD_LOGIC;
+    signal rx_enable : STD_LOGIC;
+    signal tx_bit_count : integer range 0 to DATA_BITS + STOP_BITS;
+    signal rx_bit_count : integer range 0 to DATA_BITS + STOP_BITS;
+
+begin
+    -- Transmitter
+    process(clk, rst) begin
+        if rst = '1' then
+            tx_done <= '0';
+            tx_reg <= (others => '0');
+            tx_enable <= '0';
+            tx_bit_count <= 0;
+        elsif rising_edge(clk) then
+            if tx_enable = '1' then
+                if tx_bit_count = DATA_BITS + STOP_BITS then
+                    tx_done <= '1';
+                    tx_enable <= '0';
+                else
+                    tx_reg <= tx_reg(6 downto 0) & '0';
+                    tx_bit_count <= tx_bit_count + 1;
+                end if;
+            end if;
+        end if;
+    end process;
+
+    -- Receiver
+    process(rx_clk, rst) begin
+        if rst = '1' then
+            rx_reg <= (others => '0');
+            rx_enable <= '0';
+            rx_bit_count <= 0;
+        elsif rising_edge(rx_clk) then
+            if rx_enable = '1' then
+                if rx_bit_count = DATA_BITS + STOP_BITS then
+                    rx_data <= rx_reg;
+                    rx_enable <= '0';
+                else
+                    rx_reg <= rx_reg(6 downto 0) & rx_data_in;
+                    rx_bit_count <= rx_bit_count + 1;
+                end if;
+            end if;
+        end if;
+    end process;
+
+    -- Control signals
+    tx_enable <= '1' when tx_bit_count = 0 and tx_data /= x"00" else '0';
+    rx_enable <= '1' when rx_bit_count = 0 and rx_data_in = '1' else '0';
+
+end Behavioral;
+library IEEE;
+use IEEE.STD_LOGIC;
+use IEEE.NUMERIC_STD.ALL;
+
+entity uart_tb is
+end uart_tb;
+
+architecture Behavioral of uart_tb is
+    component uart
+        Port ( clk : in  STD_LOGIC;
+               rst : in  STD_LOGIC;
+               tx_data : in  STD_LOGIC_VECTOR (7 downto 0);
+               tx_done : out  STD_LOGIC;
+               rx_data : out  STD_LOGIC_VECTOR (7 downto 0);
+               rx_clk : in  STD_LOGIC;
+               rx_data_in : in  STD_LOGIC);
+    end component;
+
+    signal clk : STD_LOGIC := '0';
+    signal rst : STD_LOGIC := '0';
+    signal tx_data : STD_LOGIC_VECTOR (7 downto 0) := x"12";
+    signal tx_done : STD_LOGIC;
+    signal rx_data : STD_LOGIC_VECTOR (7 downto 0);
+    signal rx_clk : STD_LOGIC := '0';
+    signal rx_data_in : STD_LOGIC := '0';
+
+begin
+    uut: uart
+        Port map ( clk => clk,
+                   rst => rst,
+                   tx_data => tx_data,
+                   tx_done => tx_done,
+                   rx_data => rx_data,
+                   rx_clk => rx_clk,
+                   rx_data_in => rx_data_in);
+
+    -- Clock generation
+    clk_process: process
+    begin
+        clk <= '0';
+        wait for 10 ns;
+        clk <= '1';
+        wait for 10 ns;
+    end process;
+
+    -- Reset generation
+    rst_process: process
+    begin
+        rst <= '1';
+        wait for 20 ns;
+        rst <= '0';
+        wait;
+    end process;
+
+    -- Transmitter test
+    tx_process: process
+    begin
+        wait
